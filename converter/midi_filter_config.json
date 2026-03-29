@@ -1,0 +1,5 @@
+{
+    "deduplicate_md5": true,
+    "piece_split_delay": 10000,
+    "min_piece_length": 0
+}
