@@ -19,4 +19,7 @@ public interface ConverterService
 
     @POST("/text_to_midi")
     Call<ResponseBody> textToMidi(@Body RequestBody text);
+
+    @POST("/midi_llm_produce")
+    Call<ResponseBody> midiLLMProduce(@Body RequestBody text);
 }

@@ -1,9 +1,7 @@
 package com.ow0b.c7b9.service.impl;
 
-import com.google.gson.Gson;
 import com.ow0b.c7b9.service.Encryption;
 import com.ow0b.c7b9.service.UserService;
-import com.ow0b.c7b9.service.database.json.Practice;
 import com.ow0b.c7b9.service.database.mapper.UserMapper;
 import com.ow0b.c7b9.service.database.model.User;
 import com.ow0b.c7b9.service.exception.AuthorizationException;
@@ -14,12 +12,9 @@ import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.Random;
 
 @Slf4j

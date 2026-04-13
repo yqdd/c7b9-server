@@ -3,7 +3,10 @@ package com.ow0b.midi.analyzer.group;
 import com.ow0b.midi.MinHash;
 import com.ow0b.midi.Note;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 

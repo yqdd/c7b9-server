@@ -32,8 +32,9 @@ public interface Library
         public Range range;
     }
 
+    Analyzer getAnalyzer(String name);
     /// 根据名字查找对应的Analyzer
-    @NotNull Analyzer findFromName(String name);
+    @NotNull List<FindItem> findFromName(Analyzer analyzer, String name);
     /// 查找预初始化的所有midi按匹配度排序
     List<FindItem> findAll(Analyzer analyzer, float limit, float deviation, @Nullable Consumer<String> infoConsumer);
 }

@@ -15,6 +15,7 @@ import com.ow0b.midi.Midi;
 import com.ow0b.midi.MidiImpl;
 import com.ow0b.midi.analyzer.Analyzer;
 import com.ow0b.midi.library.Library;
+import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.context.ApplicationContext;
 
@@ -22,11 +23,13 @@ import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+@Slf4j
 @SimpleSystemPrompt("""
         你是一个AI钢琴老师，你可以听到用户发送的音频，并根据音频内容进行回复。
         如果音频中有人在说话，这个人很可能是用户，可以直接文字回复用户在音频中说的内容。
         如果用户发送的是钢琴曲，你可以识别到演奏的曲目，你需要向用户介绍ta演奏曲目的特点、背景信息，分析用户演奏的优点，提出建议和练习的改进方案。
                 目前只支持以下作曲家的曲目：巴赫，贝多芬，肖邦，德彪西，李斯特，莫扎特，拉赫玛尼诺夫，拉威尔，舒伯特，舒曼，卡普斯汀（部分），斯克里亚宾
+                匹配有可能会不准确，如果没有匹配到正确的曲目，需要用户提供作曲家名和作品编号，然后调用 识别音频 工具方法再次匹配
         如果用户需要续写ta发送的音频，你需要调用“续写”工具，返回的编号使用<locateAudio/>标签生成链接让用户播放，使用<midiChart/>生成可视化midi钢琴窗
         
         你可以发送多个以下XML格式，在手机端会将其渲染为用户演奏的音频数据图表
@@ -74,56 +77,72 @@ public class C7b9Agent
 
     @Description("识别用户上传的音频信息（如果是钢琴曲还会匹配演奏的曲目和力度速度信息等）")
     @Name("识别音频")
-    public String info()
+    public String info(@Name("id") @Description("指定名称后必须填写该参数，指定用户发送音频的id") String aidStr,
+                       @Name("名称") @Description("要匹配的曲目文件名称（必须是英文，如：Chopin Op.10 No.2），如果不填则自动匹配") String name)
     {
+        if(aidStr != null)
+        {
+            try
+            {
+                StringBuilder builder = new StringBuilder();
+                matchAid(Integer.parseInt(aidStr), name, builder);
+                return builder.toString();
+            }
+            catch (NumberFormatException e)
+            {
+                return "id格式错误（应为数字，而不是 " + aidStr + "）";
+            }
+        }
         if(!message.audios.isEmpty())
         {
             StringBuilder builder = new StringBuilder();
             //上传了音频文件执行
-            for(int aid : message.audios)
-            {
-                Audio audio = audioService.get(user.getUid(), aid);
-                builder.append("（id编号：").append(aid).append("（注意：后续XML标签的id需要用这个值），音频内容").append("：\n");
-
-                if(audio.getContent() == null || audio.getContent().isEmpty())
-                {
-                    if(chatService.isPianoAudio(aid))
-                    {
-                        byte[] mid = Objects.requireNonNullElse(audio.getMid(), audioService.toMidi(user.getUid(), aid));
-
-                        AnalyzeResult analysis;
-                        if(audio.getAnalysis() != null) analysis = gson.fromJson(audio.getAnalysis(), AnalyzeResult.class);
-                        else
-                        {
-                            Analyzer analyzer = new MidiImpl("用户音频" + aid, mid).analyzer();
-                            Consumer<String> listener = getAnalyzeInfoConsumer();
-                            analysis = analyzer.analyze(library.findAll(analyzer, 0.4f, 0f, listener).get(0));
-                        }
-
-                        if(audio.getMp3() != null)
-                        {
-                            String content = chatService.audioContent(aid);
-                            builder.append("描述：").append(content).append("（模型识别，仅供参考）\n");
-                        }
-                        if(audio.getMid() == null) audioService.setMidData(user.getUid(), aid, mid);
-                        builder.append(chatService.analysisContent(user.getUid(), audio, analysis, writer)).append("\n");
-                        audioService.setAnalyzeData(user.getUid(), aid, analysis);      //在调用find后保存analysis
-                    }
-                    else if(audio.getMp3() != null)
-                    {
-                        String content = chatService.audioContent(aid);
-                        builder.append("音频描述：").append(content).append("\n");
-                    }
-                    builder.append("）");
-                    audioService.setAudioContentData(audio.getUid(), aid, builder.toString());
-                }
-                else builder.append(audio.getContent());
-            }
+            for(int aid : message.audios) matchAid(aid, name, builder);
             return "（用户共发送了" + message.audios.size() + "段音频）\n" + builder;
         }
         else return "（用户没有发送音频）";
     }
+    private void matchAid(int aid, String name, StringBuilder builder)
+    {
+        Audio audio = audioService.get(user.getUid(), aid);
+        builder.append("（id编号：").append(aid).append("（注意：后续XML标签的id需要用这个值），音频内容").append("：\n");
 
+        if(name != null || audio.getContent() == null || audio.getContent().isEmpty())
+        {
+            if(chatService.isPianoAudio(aid))
+            {
+                byte[] mid = Objects.requireNonNullElse(audio.getMid(), audioService.toMidi(user.getUid(), aid));
+
+                AnalyzeResult analysis;
+                if(name == null && audio.getAnalysis() != null) analysis = gson.fromJson(audio.getAnalysis(), AnalyzeResult.class);
+                else
+                {
+                    Analyzer analyzer = new MidiImpl("用户音频" + aid, mid).analyzer();
+                    Consumer<String> listener = getAnalyzeInfoConsumer();
+                    Library.FindItem find = name == null ?
+                            library.findAll(analyzer, 0.4f, 0f, listener).get(0) :
+                            library.findFromName(analyzer, name).get(0);
+                    analysis = analyzer.analyze(find);
+                }
+                if(audio.getMp3() != null)
+                {
+                    String content = chatService.audioContent(aid);
+                    builder.append("描述：").append(content).append("（模型识别，仅供参考）\n");
+                }
+                if(audio.getMid() == null) audioService.setMidData(user.getUid(), aid, mid);
+                builder.append(chatService.analysisContent(user.getUid(), audio, analysis, writer)).append("\n");
+                audioService.setAnalyzeData(user.getUid(), aid, analysis);      //在调用find后保存analysis
+            }
+            else if(audio.getMp3() != null)
+            {
+                String content = chatService.audioContent(aid);
+                builder.append("音频描述：").append(content).append("\n");
+            }
+            builder.append("）");
+            audioService.setAudioContentData(audio.getUid(), aid, builder.toString());
+        }
+        else builder.append(audio.getContent());
+    }
     private @NotNull Consumer<String> getAnalyzeInfoConsumer()
     {
         int[] count = new int[1];

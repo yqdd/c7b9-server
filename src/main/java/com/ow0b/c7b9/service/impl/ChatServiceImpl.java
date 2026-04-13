@@ -3,8 +3,6 @@ package com.ow0b.c7b9.service.impl;
 import com.google.gson.Gson;
 import com.ow0b.ai.client.ChatClient;
 import com.ow0b.ai.client.DashscopeAudioClient;
-import com.ow0b.ai.client.V1Client;
-import com.ow0b.ai.client.abstracted.ChatConfig;
 import com.ow0b.ai.client.message.Message;
 import com.ow0b.ai.client.message.Role;
 import com.ow0b.c7b9.ChatWriter;
@@ -12,6 +10,7 @@ import com.ow0b.c7b9.controller.impl.chat.ContextAccessDeniedException;
 import com.ow0b.c7b9.service.AudioService;
 import com.ow0b.c7b9.service.ChatService;
 import com.ow0b.c7b9.service.UserService;
+import com.ow0b.c7b9.service.converter.ConverterService;
 import com.ow0b.c7b9.service.database.json.ContextData;
 import com.ow0b.c7b9.service.database.json.Conversations;
 import com.ow0b.c7b9.service.database.json.Practice;
@@ -20,16 +19,21 @@ import com.ow0b.c7b9.service.database.mapper.ContextMapper;
 import com.ow0b.c7b9.service.database.model.Audio;
 import com.ow0b.c7b9.service.database.model.Context;
 import com.ow0b.midi.AnalyzeResult;
-import com.ow0b.midi.Note;
 import com.ow0b.midi.Midi;
 import com.ow0b.midi.MidiImpl;
+import com.ow0b.midi.Note;
+import jakarta.annotation.PostConstruct;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
+import retrofit2.Retrofit;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,6 +56,15 @@ public class ChatServiceImpl implements ChatService, TempDir
     private ContextMapper contextMapper;
     @Setter(onMethod_ = @Autowired)
     private AudioMapper audioMapper;
+    @Setter(onMethod_ = @Autowired)
+    private Retrofit retrofit;
+
+    private ConverterService converterService;
+    @PostConstruct
+    public void init()
+    {
+        converterService = retrofit.create(ConverterService.class);
+    }
 
     @Override
     public int newConversationContext(int uid, @Nullable String title, @Nullable ContextData data)
@@ -176,6 +189,7 @@ public class ChatServiceImpl implements ChatService, TempDir
     @Override
     public Midi produce(@NotNull Midi midi)
     {
+        /*
         V1Client rwkvClient = applicationContext.getBean(V1Client.class);
         rwkvClient.setMessage(audioService.encodeTokenizer(midi));
         log.info("续写前半段：{}", rwkvClient.getMessage());
@@ -186,6 +200,17 @@ public class ChatServiceImpl implements ChatService, TempDir
         log.info("续写后半段：{}", tokenizer);
         String result = rwkvClient.getMessage() + (rwkvClient.getMessage().endsWith(" ") ? "" : " ") + tokenizer;
         return new MidiImpl(midi.getName() + "的续写", audioService.decodeTokenizer(result));
+         */
+        try(ResponseBody body = converterService.midiLLMProduce(
+                RequestBody.create(audioService.encodeTokenizer(midi), MediaType.get("text/plain"))).execute().body())
+        {
+            String result = Objects.requireNonNull(body).string();
+            return new MidiImpl(midi.getName() + "的续写", audioService.decodeTokenizer(result));
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override

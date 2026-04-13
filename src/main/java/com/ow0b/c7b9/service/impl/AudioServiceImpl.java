@@ -25,7 +25,10 @@ import retrofit2.Retrofit;
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.UnsupportedAudioFileException;
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -208,8 +211,10 @@ public class AudioServiceImpl implements AudioService, TempDir
             try(FileInputStream input = new FileInputStream(file);
                 ResponseBody body = converterService.midToText(RequestBody.create(input.readAllBytes())).execute().body())
             {
-                log.error("midi转llm文本出错");
-                return body == null ? null : body.string();
+                if(body == null) return null;
+                String str = body.string();
+                log.info("midi转llm文本：" + str);
+                return str;
             }
         }
         catch (IOException e)

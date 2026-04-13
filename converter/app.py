@@ -8,6 +8,7 @@ from piano_transcription_inference import PianoTranscription, sample_rate, load_
 import numpy as np
 import tempfile
 import ffmpeg
+from transformers import AutoTokenizer, pipeline
 
 import midi
 from midi import VocabConfig, FilterConfig
@@ -21,6 +22,8 @@ temp_dir = os.path.join(os.getcwd(), "temp")
 if not os.path.exists(temp_dir):
     os.mkdir(temp_dir)
 
+tokenizer_produce = AutoTokenizer.from_pretrained("C7B9-v0.0.1")
+generator_produce = pipeline("text-generation", model="C7B9-v0.0.1", tokenizer=tokenizer_produce, max_length=1024)
 
 @app.route('/m4a_to_midi', methods=['POST'])
 def m4a_to_midi():
@@ -82,6 +85,13 @@ def str_to_mid():
     os.remove(temp_mid.name)
     return Response(mid, mimetype='audio/midi')
 
+@app.route('/midi_llm_produce', methods=['POST'])
+def midi_llm_produce():
+    text = request.get_data(as_text=True)
+    print("源文本：", text)
+    result = generator_produce(text, max_new_tokens=128, truncation=True)
+    print("续写：", result[0]['generated_text'])
+    return Response(result[0]['generated_text'], mimetype='text/plain')
 
 if __name__ == '__main__':
     app.run()

@@ -1,7 +1,6 @@
 package com.ow0b.midi;
 
 import com.ow0b.midi.analyzer.Analyzer;
-import com.ow0b.midi.analyzer.group.NoteGroup;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

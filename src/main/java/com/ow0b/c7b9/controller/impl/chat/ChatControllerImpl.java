@@ -1,13 +1,14 @@
 package com.ow0b.c7b9.controller.impl.chat;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.ow0b.ai.client.ChatClient;
+import com.ow0b.ai.client.DashscopeAudioClient;
 import com.ow0b.ai.client.abstracted.ChatConfig;
 import com.ow0b.ai.client.function.ToolCalls;
 import com.ow0b.ai.client.message.Message;
 import com.ow0b.ai.client.message.Messages;
 import com.ow0b.ai.client.message.Role;
+import com.ow0b.c7b9.ChatWriter;
 import com.ow0b.c7b9.annotation.LoginRequired;
 import com.ow0b.c7b9.controller.ChatController;
 import com.ow0b.c7b9.controller.impl.audio.AudioNotFoundException;
@@ -16,8 +17,9 @@ import com.ow0b.c7b9.service.ChatService;
 import com.ow0b.c7b9.service.Encryption;
 import com.ow0b.c7b9.service.database.json.ContextData;
 import com.ow0b.c7b9.service.database.json.Conversations;
+import com.ow0b.c7b9.service.database.model.Audio;
 import com.ow0b.c7b9.service.database.model.User;
-import com.ow0b.c7b9.ChatWriter;
+import com.ow0b.c7b9.service.impl.TempDir;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,9 +27,13 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.*;
+import java.io.File;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.file.AccessDeniedException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @LoginRequired
 @Slf4j
@@ -49,6 +55,8 @@ public class ChatControllerImpl implements ChatController
     @Override
     @RequestMapping("/chat")
     public StreamingResponseBody chat(@ModelAttribute User user,
+                                      @RequestParam(defaultValue = "true") boolean thinking,
+                                      @RequestParam(defaultValue = "true") boolean matchMidi,
                                       @RequestParam("message") String content,
                                       @RequestParam(value = "id", required = false, defaultValue = "-1") int id,
                                       @RequestBody(required = false) List<Integer> audios)
@@ -63,55 +71,114 @@ public class ChatControllerImpl implements ChatController
                 if(!chats.containsKey(sid[0]))
                 {
                     ChatClient chatClient = context.getBean(ChatClient.class);
-                    ChatWriter writer = new ChatWriter(new OutputStreamWriter(outputStream));
-                    Thread chatThread = new Thread(() ->
+                    if(audios == null || audios.isEmpty() || matchMidi)
                     {
-                        try
+                        ChatWriter writer = new ChatWriter(new OutputStreamWriter(outputStream));
+                        Thread chatThread = new Thread(() ->
+                        {
+                            try
+                            {
+                                PianoMessage userMessage = new PianoMessage(Role.USER, content);
+                                C7b9Agent agent = new C7b9Agent(context, user, writer, userMessage);
+                                if(audios != null) userMessage.audios.addAll(audios);
+
+                                writer.sendStreamJson("context", "id", sid[0]);
+                                log.info("{} {}", id, chatClient.messages);
+                                chatClient.messages.clear();
+                                chatClient.messages.addAll(chatService.getContextData(user.getUid(), sid[0]));
+                                //log.info("{} {}", sid[0], chatClient.messages);
+                                chatClient.messages.add(userMessage);
+                                if(audios != null && !audios.isEmpty())
+                                {
+                                    String toolCallId = "call_" + Encryption.encryptMD5(String.valueOf(audios.hashCode()));
+                                    String toolName = "识别音频";
+                                    Message toolCallMessage = new Message(Role.ASSISTANT, new ToolCalls.ToolCall(toolCallId, new ToolCalls.Function(toolName, "{}")));
+                                    chatClient.messages.add(toolCallMessage);
+                                    chatClient.messages.add(new Message(Role.TOOL, toolCallId, agent.info(null, null)));
+                                }
+                                chatClient.registry(agent);
+                                chatClient.call(delta -> writer.sendStreamJson("message",
+                                                new ChatWriter.Datum("content", delta.content),
+                                                new ChatWriter.Datum("reasoning", delta.reasoning)),
+                                        ChatConfig.builder().stream(true).thinking(thinking).build());
+
+                                //保存数据
+                                ContextData data = new ContextData(chatClient.messages.getMessageList());
+                                //Conversations conv = chatService.getConversations(user.uid);
+                                chatService.setContextData(user.getUid(), sid[0], data);
+                                if(chats.containsKey(sid[0]))
+                                {
+                                    chats.get(sid[0]).writer.close();
+                                    chats.remove(sid[0]);
+                                    writer.close();
+                                }
+                            }
+                            catch (Exception e)
+                            {
+                                log.error("", e);
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+                        chats.put(sid[0], new ChatData(user, chatThread, writer, chatClient.messages));
+                        chatThread.start();
+                        chatThread.join();
+                    }
+                    else
+                    {
+                        DashscopeAudioClient audioClient = context.getBean(DashscopeAudioClient.class);
+                        ChatWriter writer = new ChatWriter(new OutputStreamWriter(outputStream));
+                        Thread chatThread = new Thread(() ->
                         {
                             PianoMessage userMessage = new PianoMessage(Role.USER, content);
-                            C7b9Agent agent = new C7b9Agent(context, user, writer, userMessage);
-                            if(audios != null) userMessage.audios.addAll(audios);
-
-                            writer.sendStreamJson("context", "id", sid[0]);
-                            log.info("{} {}", id, chatClient.messages);
-                            chatClient.messages.clear();
+                            userMessage.audios.addAll(audios);
                             chatClient.messages.addAll(chatService.getContextData(user.getUid(), sid[0]));
-                            //log.info("{} {}", sid[0], chatClient.messages);
                             chatClient.messages.add(userMessage);
-                            if(audios != null && !audios.isEmpty())
+                            try
                             {
-                                String toolCallId = "call_" + Encryption.encryptMD5(String.valueOf(audios.hashCode()));
-                                String toolName = "识别音频";
-                                Message toolCallMessage = new Message(Role.ASSISTANT, new ToolCalls.ToolCall(toolCallId, new ToolCalls.Function(toolName, "")));
-                                chatClient.messages.add(toolCallMessage);
-                                chatClient.messages.add(new Message(Role.TOOL, toolCallId, agent.info()));
-                            }
-                            chatClient.registry(agent);
-                            chatClient.call(delta -> writer.sendStreamJson("message",
-                                    new ChatWriter.Datum("content", delta.content),
-                                    new ChatWriter.Datum("reasoning", delta.reasoning)),
-                                    ChatConfig.builder().stream(true).thinking(true).build());
+                                if(!audios.isEmpty())
+                                {
+                                    Audio audio = audioService.get(user.getUid(), audios.get(0));
+                                    File mp3File = File.createTempFile("temp-", ".mp3", TempDir.temp.toFile());
+                                    if(audio.getMp3() != null)
+                                    {
+                                        ((TempDir) chatService).saveCache(mp3File, audio.getMp3());
+                                        audioClient.setUriFile(mp3File);
+                                    }
+                                }
+                                StringBuilder aiContent = new StringBuilder(), aiReasoning = new StringBuilder();
+                                audioClient.setMessage(content);
+                                audioClient.call(delta ->
+                                        {
+                                            aiContent.append(delta.content);
+                                            aiReasoning.append(delta.reasoning);
+                                            writer.sendStreamJson("message",
+                                                    new ChatWriter.Datum("content", delta.content),
+                                                    new ChatWriter.Datum("reasoning", delta.reasoning));
+                                        },
+                                        ChatConfig.builder().stream(true).thinking(thinking).build());
+                                PianoMessage aiMessage = new PianoMessage(Role.ASSISTANT, aiContent.toString(), aiReasoning.toString());
+                                chatClient.messages.add(aiMessage);
 
-                            //保存数据
-                            ContextData data = new ContextData(chatClient.messages.getMessageList());
-                            //Conversations conv = chatService.getConversations(user.uid);
-                            chatService.setContextData(user.getUid(), sid[0], data);
-                            if(chats.containsKey(sid[0]))
-                            {
-                                chats.get(sid[0]).writer.close();
-                                chats.remove(sid[0]);
-                                writer.close();
+                                //保存数据
+                                ContextData data = new ContextData(chatClient.messages.getMessageList());
+                                chatService.setContextData(user.getUid(), sid[0], data);
+                                if(chats.containsKey(sid[0]))
+                                {
+                                    chats.get(sid[0]).writer.close();
+                                    chats.remove(sid[0]);
+                                    writer.close();
+                                }
                             }
-                        }
-                        catch (Exception e)
-                        {
-                            log.error("", e);
-                            Thread.currentThread().interrupt();
-                        }
-                    });
-                    chats.put(sid[0], new ChatData(user, chatThread, writer, chatClient.messages));
-                    chatThread.start();
-                    chatThread.join();
+                            catch (Exception e)
+                            {
+                                log.error("", e);
+                                Thread.currentThread().interrupt();
+                            }
+                        });
+                        chats.put(sid[0], new ChatData(user, chatThread, writer, chatClient.messages));
+                        chatThread.start();
+                        chatThread.join();
+                    }
                 }
                 else
                 {

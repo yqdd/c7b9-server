@@ -1,17 +1,19 @@
 package com.ow0b.midi;
 
-import javax.sound.midi.*;
-import java.io.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-
 import com.ow0b.midi.analyzer.Analyzer;
 import com.ow0b.midi.analyzer.AnalyzerImpl;
 import com.ow0b.midi.analyzer.group.NoteGroup;
 import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
+
+import javax.sound.midi.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 
 @Getter
 public class MidiImpl implements Midi

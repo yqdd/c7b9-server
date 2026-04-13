@@ -1,13 +1,9 @@
 package com.ow0b.c7b9.service;
 
-import com.ow0b.c7b9.service.database.json.Practice;
 import com.ow0b.c7b9.service.database.model.User;
 import com.ow0b.c7b9.service.exception.AuthorizationException;
-import com.ow0b.c7b9.service.exception.TooManyLoginAttemptException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.sql.Timestamp;
 
 public interface UserService
 {

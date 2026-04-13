@@ -1,6 +1,5 @@
 package com.ow0b.c7b9.service.database.mapper;
 
-import com.ow0b.c7b9.service.database.json.Conversations;
 import com.ow0b.c7b9.service.database.model.Context;
 import org.apache.ibatis.annotations.*;
 

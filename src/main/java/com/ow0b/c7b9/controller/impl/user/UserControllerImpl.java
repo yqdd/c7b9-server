@@ -8,7 +8,6 @@ import com.ow0b.c7b9.service.database.json.Conversations;
 import com.ow0b.c7b9.service.database.model.User;
 import lombok.Setter;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 

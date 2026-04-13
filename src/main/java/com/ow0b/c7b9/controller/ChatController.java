@@ -14,7 +14,7 @@ public interface ChatController
      * @param id 对话id
      * @param audios 附带的音频资源id，附带在body（通过[0, 1, ...]声明，可附带多个）
      */
-    StreamingResponseBody chat(User user, String message, int id, List<Integer> audios) throws Exception;
+    StreamingResponseBody chat(User user, boolean thinking, boolean matchMidi, String message, int id, List<Integer> audios) throws Exception;
 
     /**
      * 返回某轮对话的所有内容

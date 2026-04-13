@@ -164,7 +164,7 @@ public class AudioControllerImpl implements AudioController
             if(audio.getAnalysis() != null)
             {
                 AnalyzeResult analysis = gson.fromJson(audio.getAnalysis(), AnalyzeResult.class);
-                Analyzer analyzer = library.findFromName(analysis.name);
+                Analyzer analyzer = library.getAnalyzer(analysis.name);
                 List<Note> notes = analyzer.getMidi().getNotes().stream()
                         .filter(n -> n.start >= analysis.startTime && n.end <= analysis.endTime)
                         .map(n -> new Note(n.pitch, n.start - analysis.startTime, n.end - analysis.startTime, n.force))

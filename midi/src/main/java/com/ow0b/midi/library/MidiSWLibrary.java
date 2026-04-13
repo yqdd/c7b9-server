@@ -1,7 +1,7 @@
 package com.ow0b.midi.library;
 
-import com.ow0b.midi.analyzer.Analyzer;
 import com.ow0b.midi.MidiImpl;
+import com.ow0b.midi.analyzer.Analyzer;
 import com.ow0b.midi.analyzer.group.NoteGroup;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -54,9 +54,46 @@ public class MidiSWLibrary implements Library
     }
 
     @Override
-    public @NotNull Analyzer findFromName(String name)
+    public Analyzer getAnalyzer(String name)
     {
         return analyzers.get(name);
+    }
+    @Override
+    public @NotNull List<FindItem> findFromName(Analyzer analyzer, String name)
+    {
+        List<Map.Entry<Double, String>> matchKeys = new ArrayList<>(analyzers.keySet().stream()
+                .map(s -> Map.entry(jaccardSimilarity(s, name), s))
+                .toList());
+        matchKeys.sort(Comparator.comparingDouble(k -> -k.getKey()));
+        List<FindItem> results = new ArrayList<>();
+        double similarity = -1;
+        for(Map.Entry<Double, String> entry : matchKeys)
+        {
+            if(similarity == -1) similarity = entry.getKey();
+            if(entry.getKey() != similarity) break;
+            Analyzer a2 = analyzers.get(entry.getValue());
+            Range range = rangeOf(analyzer, a2, 0.4f, 0);
+            results.add(new FindItem(a2, a2.getMidi().getName(), range));
+        }
+        return results;
+    }
+    /// Jaccard相似度（基于字符集合）
+    /// @return 相似度
+    private double jaccardSimilarity(String str1, String str2)
+    {
+        if (str1 == null || str2 == null) return 0;
+        Set<Character> set1 = new HashSet<>();
+        Set<Character> set2 = new HashSet<>();
+        for (char c : str1.toCharArray()) set1.add(c);
+        for (char c : str2.toCharArray()) set2.add(c);
+        // 计算交集
+        Set<Character> intersection = new HashSet<>(set1);
+        intersection.retainAll(set2);
+        // 计算并集
+        Set<Character> union = new HashSet<>(set1);
+        union.addAll(set2);
+        if (union.isEmpty()) return 0;
+        return (double) intersection.size() / union.size();
     }
     @Override
     public List<FindItem> findAll(Analyzer analyzer, float limit, float deviation, @Nullable Consumer<String> infoConsumer)
@@ -75,7 +112,6 @@ public class MidiSWLibrary implements Library
             catch (SimilarityTooLowException ignore) { }
             i ++;
         }
-
         result.sort((i1, i2) -> -Float.compare(i1.range.value, i2.range.value));
         return result;
     }

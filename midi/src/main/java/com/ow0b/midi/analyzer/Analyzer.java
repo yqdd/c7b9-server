@@ -2,14 +2,11 @@ package com.ow0b.midi.analyzer;
 
 import com.ow0b.midi.AnalyzeResult;
 import com.ow0b.midi.Midi;
-import com.ow0b.midi.Note;
 import com.ow0b.midi.analyzer.group.NoteGroup;
 import com.ow0b.midi.library.Library;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 public interface Analyzer
 {
